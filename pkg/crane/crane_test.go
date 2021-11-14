@@ -26,6 +26,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -450,7 +451,7 @@ func TestCraneFilesystem(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := crane.Export(img, &buf); err != nil {
+	if err := crane.Export(img, &buf, "/some/*"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -472,6 +473,61 @@ func TestCraneFilesystem(t *testing.T) {
 			}
 			break
 		}
+	}
+}
+
+func TestCraneExtract(t *testing.T) {
+	t.Parallel()
+	tmp, err := ioutil.TempFile("", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	img, err := random.Image(1024, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	name := "/some/file"
+	content := []byte("sentinel")
+
+	tw := tar.NewWriter(tmp)
+	if err := tw.WriteHeader(&tar.Header{
+		Size: int64(len(content)),
+		Name: name,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write(content); err != nil {
+		t.Fatal(err)
+	}
+	tw.Flush()
+	tw.Close()
+
+	img, err = crane.Append(img, tmp.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := crane.Extract(img, "./", "/some/*"); err != nil {
+		t.Fatal(err)
+	}
+
+	absFileName := filepath.Join("./", name)
+	if _, err := os.Stat(filepath.Dir(absFileName)); os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+
+	fc, err := os.ReadFile(absFileName)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if string(fc) != string(content) {
+		t.Fatal("file content error")
+	}
+
+	if err := os.RemoveAll(absFileName); err != nil {
+		t.Fatal(err)
 	}
 }
 
