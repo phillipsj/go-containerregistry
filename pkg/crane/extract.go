@@ -25,14 +25,14 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 )
 
-// Extract writes the filesystem contents (as a tarball) of img to the specified directory. If a pattern is supplied it
-// filters the files being extracted.
-func Extract(img v1.Image, dir string, pattern string) error {
-	absPath, err := filepath.Abs(dir)
-	if err != nil {
-		return err
-	}
+// asterisk The character which is treated like a glob
+const asterisk = "*"
 
+type ExtractArgs map[string]string
+
+// Extract writes the filesystem contents (as a tarball) of img to the specified directory. Args take a map of output directory
+// and pattern to match the files to extract.
+func Extract(img v1.Image, args ExtractArgs) error {
 	fs := mutate.Extract(img)
 	defer fs.Close()
 
@@ -45,48 +45,50 @@ func Extract(img v1.Image, dir string, pattern string) error {
 		if err != nil {
 			return err
 		}
-
-		if ok, _ := match(pattern, hdr.Name); ok {
-			fi := hdr.FileInfo()
-			fileName := hdr.Name
-			absFileName := filepath.Join(absPath, fileName)
-			if fi.Mode().IsDir() {
-				if err := os.MkdirAll(absFileName, 0755); err != nil {
-					return err
-				}
-				continue
-			}
-
-			fileDir := filepath.Dir(absFileName)
-			_, err := os.Stat(fileDir)
-			if os.IsNotExist(err) {
-				if err := os.MkdirAll(fileDir, 0755); err != nil {
-					return err
-				}
-			}
-
-			// create new file with original file mode
-			file, err := os.OpenFile(
-				absFileName,
-				os.O_RDWR|os.O_CREATE|os.O_TRUNC,
-				0755,
-			)
+		for dir, pattern := range args {
+			absPath, err := filepath.Abs(dir)
 			if err != nil {
 				return err
 			}
-			if _, err := io.Copy(file, tr); err != nil {
-				return err
-			}
-			if err := file.Close(); err != nil {
-				return err
+			if ok, _ := match(pattern, hdr.Name); ok {
+				fi := hdr.FileInfo()
+				fileName := hdr.Name
+				absFileName := filepath.Join(absPath, fileName)
+				if fi.Mode().IsDir() {
+					if err := os.MkdirAll(absFileName, 0755); err != nil {
+						return err
+					}
+					continue
+				}
+
+				fileDir := filepath.Dir(absFileName)
+				_, err := os.Stat(fileDir)
+				if os.IsNotExist(err) {
+					if err := os.MkdirAll(fileDir, 0755); err != nil {
+						return err
+					}
+				}
+
+				// create new file with original file mode
+				file, err := os.OpenFile(
+					absFileName,
+					os.O_RDWR|os.O_CREATE|os.O_TRUNC,
+					0755,
+				)
+				if err != nil {
+					return err
+				}
+				if _, err := io.Copy(file, tr); err != nil {
+					return err
+				}
+				if err := file.Close(); err != nil {
+					return err
+				}
 			}
 		}
 	}
 	return nil
 }
-
-// asterisk The character which is treated like a glob
-const asterisk = "*"
 
 // match takes a pattern with a glob (asterisk) and determines if the supplied path matches.
 func match(pattern, path string) (bool, error) {

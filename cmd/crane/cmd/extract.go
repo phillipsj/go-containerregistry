@@ -27,10 +27,9 @@ func NewCmdExtract(options *[]crane.Option) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("pulling %s: %w", src, err)
 			}
-
-			return crane.Extract(img, dst, pattern)
+			return crane.Extract(img, crane.ExtractArgs{dst: pattern})
 		},
 	}
-	exportCmd.Flags().StringVarP(&pattern, "pattern", "p", "", "The shell file name pattern to export only a subset of files from an image. If nothing is based default behavior occurs.")
+	exportCmd.Flags().StringVarP(&pattern, "pattern", "p", "*", "The shell file name pattern to export only a subset of files from an image. If nothing is based default behavior occurs.")
 	return exportCmd
 }
