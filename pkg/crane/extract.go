@@ -23,6 +23,7 @@ import (
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
+	"github.com/spf13/afero"
 )
 
 // asterisk The character which is treated like a glob
@@ -32,11 +33,11 @@ type ExtractArgs map[string]string
 
 // Extract writes the filesystem contents (as a tarball) of img to the specified directory. Args take a map of output directory
 // and pattern to match the files to extract.
-func Extract(img v1.Image, args ExtractArgs) error {
-	fs := mutate.Extract(img)
-	defer fs.Close()
+func Extract(fs afero.Fs, img v1.Image, args ExtractArgs) error {
+	rc := mutate.Extract(img)
+	defer rc.Close()
 
-	tr := tar.NewReader(fs)
+	tr := tar.NewReader(rc)
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
@@ -55,22 +56,22 @@ func Extract(img v1.Image, args ExtractArgs) error {
 				fileName := hdr.Name
 				absFileName := filepath.Join(absPath, fileName)
 				if fi.Mode().IsDir() {
-					if err := os.MkdirAll(absFileName, 0755); err != nil {
+					if err := fs.MkdirAll(absFileName, 0755); err != nil {
 						return err
 					}
 					continue
 				}
 
 				fileDir := filepath.Dir(absFileName)
-				_, err := os.Stat(fileDir)
+				_, err := fs.Stat(fileDir)
 				if os.IsNotExist(err) {
-					if err := os.MkdirAll(fileDir, 0755); err != nil {
+					if err := fs.MkdirAll(fileDir, 0755); err != nil {
 						return err
 					}
 				}
 
 				// create new file with original file mode
-				file, err := os.OpenFile(
+				file, err := fs.OpenFile(
 					absFileName,
 					os.O_RDWR|os.O_CREATE|os.O_TRUNC,
 					0755,
